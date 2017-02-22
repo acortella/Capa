@@ -102,13 +102,16 @@ used_data <- used_data[,-c(3:(unlist(temp[2])-1)),with=F]
 
 #### Etape 3
 #### On fixe un test set de 90 jours sur 100 jours et on garde 60 jours
-#### pour les prévisions, on garde aussi au moins 6 jours sur
+#### pour les prévisions, on garde aussi au moins 5 jours sur
 #### le training set pour faire de la cross-validation avec la regression
+#### On garde aussi 90 jours pour pouvoir calculer les équations à 90 inconnues
+#### avec la problématique de régression, on garde aussi 90 en plus car l'on ne
+#### va prendre en entrées que des valeurs différentes de NA
 #### Suppression des bases de données qui n'ont pas assez de volumétrie
 #### connue pour faire partie de l'étude
 vol_minimum <- function(my_data, d_prev=60, d_feat_test=90,
-                        d_nb_test=99, d_training_cv=6){
-    d_min <- d_prev + d_feat_test + d_nb_test + d_training_cv
+                        d_nb_test=99, d_training_cv=5, d_inconnues=90, d_na=90){
+    d_min <- d_prev + d_feat_test + d_nb_test + d_training_cv + d_inconnues + d_na
     rel_ind_l <- unlist(na.omit(my_data[,-c(1, 3:(ncol(my_data)-d_min+1)),
                                         with=F])[,ind])
     my_data <- my_data[ind %in% rel_ind_l]
@@ -179,8 +182,8 @@ p_0_to_1 <- plot_ly(x=temp_vect[,nb], y=temp_vect[,value],
 temp <- temp[value>=0.95]
 p_0_95_to_1 <- plot_ly(x=temp[,nb], y=temp[,value], 
     xaxis="nb_entry", yaxis="threshold", mode="lines", type="scatter")
-s1 <- temp[1,][,nb]:6339320
-s2 <- 6339320:temp[nrow(temp),][,nb]
+s1 <- temp[1,][,nb]:5920964
+s2 <- 5920964:temp[nrow(temp),][,nb]
 m1 <- lm(unlist(temp[nb>=s1[1]][nb<=s1[length(s1)]][,value])~s1)
 m2 <- lm(unlist(temp[nb>=s2[1]][nb<=s2[length(s2)]][,value])~s2)
 

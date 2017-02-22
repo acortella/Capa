@@ -139,8 +139,8 @@ test_set <- get_set(test_used, test_limit, test_max_10, test_max_30, test_max_60
 
 keep <- unique(training_set[,ind])
 test_set <- test_set[ind %in% keep]
-limit_data <- limit_data[ind %in% keep]
-max_60 <- max_60[ind %in% keep]
+# limit_data <- limit_data[ind %in% keep]
+# max_60 <- max_60[ind %in% keep]
 
 ## Vérifie que les id correspondent
 length(sort(unique(training_set[,ind])))==length(sort(unique(test_set[,ind]), decreasing=F))
@@ -155,7 +155,11 @@ p <- 0.5
 s <- 95/100
 e <- 5/100
 t <- 1.96
-n_ech <- (t*t*p*(1-p))/(e*e)
+i_ech <- (t*t*p*(1-p))/(e*e)
+
+## Population ajustée
+nb_bd <- nrow(test_set)/100
+n_ech <- i_ech/(1 + (i_ech-1)/nb_bd)
 n_ech <- ceiling(n_ech)
 
 ## Génération de nombre aléatoires

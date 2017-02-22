@@ -40,6 +40,7 @@ library(RSNNS)
 library(caTools)
 library(kernlab)
 library(arm)
+
 load("data_processing.RData")
 
 ####################################################################################################################
@@ -48,7 +49,6 @@ load("data_processing.RData")
 
 ### Filter training set
 filtre_coefficient <- function(my_vector, my_case=60){
-    my_vector <- temp_train[1,2:92,with=F]
     my_vector <- unlist(my_vector)
     my_limit <-  my_vector[length(my_vector)]
     my_vector <- my_vector[1:(length(my_vector)-1)]
@@ -66,24 +66,24 @@ filtre_max_limit <- function(my_vector){
     ifelse(any(unlist(my_vector)>=my_limit*0.90), 1, 0)
 }
 
-
 ## filtre training_set
 filtre_training <- function(my_training=training_set){
     vect <- sort(unique(my_training[,ind]))
     filtered <- NULL
-    for(i in 1:length(vect)){
-        temp_train <- my_training[ind==vect[i]]
+    for(g in 1:length(vect)){
+        temp_train <- my_training[ind==vect[g]]
         temp_train <- temp_train[,":="("fc"=apply(temp_train[,2:92,with=F],1,function(x){filtre_coefficient(x, 60)}),
                                            "fm"=apply(temp_train[,2:92,with=F],1,filtre_max_limit))]
         if(all(temp_train[,fc]==0) && all(temp_train[,fm]==0)){
-            filtered <- c(filtered, vect[i])
+            filtered <- c(filtered, vect[g])
         }
-        print(c(i, length(filtered)))
+        print(c(g, length(filtered)))
     }
     my_training <- my_training[!ind %in% filtered]
     return(my_training)
 }
 training_set <- filtre_training(training_set)
+
 
 ## Soustrait les max du training set et du test set par la dernière volumétrie limite
 sous <- function(my_data){
@@ -92,7 +92,6 @@ sous <- function(my_data){
 }
 training_set <- sous(training_set)
 test_set <- sous(test_set)
-
 
 ## Optimise le score d'après la métrique de score
 best_score <- function(pred, obs, th=NULL, mu=10^(-10), delta=0.01, alpha=2, beta=1, stand=7){
@@ -115,7 +114,6 @@ best_score <- function(pred, obs, th=NULL, mu=10^(-10), delta=0.01, alpha=2, bet
     return(score)
 }
 
-
 ## Donne la matrice de confusion
 get_confusion <- function(x){
     x <- unlist(x)
@@ -128,18 +126,22 @@ get_confusion <- function(x){
     }
 }
 
-
 ## Métrique définie (contient deux autres fonctions pour les intégrer dans les clusters de DoSnow)
 quaqua_Summary_reg <- function (data, lev = NULL, model = NULL) {
     # saveRDS(data, "data.rds")
     # data <- readRDS("data.rds")
     
     obs <- unlist(data$obs)
+    obs[obs>=0] <- 2
+    obs[obs<0] <- 1
     obs <- unlist(lapply(obs, function(x){ifelse(x>=0, 2, 1)}))
     
     if("pred"  %in% names(data)){
         pred <- unlist(data$pred)
-        pred <- unlist(lapply(pred, function(x){ifelse(is.na(x), 1, x)}))
+        pred[is.na(pred)] <- -1
+        # pred[x>=0] <- 1
+        # pred[x<0] <- 0
+        pred <- unlist(lapply(pred, function(x){ifelse(is.na(x), -1, x)}))
         pred <- unlist(lapply(pred, function(x){ifelse(x>=0, 1, 0)}))
         score <- pred + obs
         TP <- length(score[which(score==3)])
@@ -163,102 +165,150 @@ quaqua_Summary_reg <- function (data, lev = NULL, model = NULL) {
     out <- score
     names(out) <- "qq_metric"
     out
-    # 
-    # if (any(is.nan(out))) 
-    #     out[is.nan(out)] <- NA
-    # out
-    
-    # }, error = function(e) {
-    #     saveRDS(data, "data.rds")
-    #     print(e)
-    # 
-    # })
 }
+
+#####################################################
+#### #####################  FE #########
+#####################################################
+add_feature <- function(my_training, my_case){
+    my_training <- my_training[,':='("max_90"=(apply(my_training[,1:90,with=F],1,max)),
+                                     "min_90"=(apply(my_training[,1:90,with=F],1,min)),
+                                     "median_90"=(apply(my_training[,1:90,with=F],1,median)),
+                                     "mean_90"=(apply(my_training[,1:90,with=F],1,mean)),
+                                     "sd_90"=(apply(my_training[,1:90,with=F],1,sd)),
+                                     
+                                     "max_80"=(apply(my_training[,11:90,with=F],1,max)),
+                                     "min_80"=(apply(my_training[,11:90,with=F],1,min)),
+                                     "median_80"=(apply(my_training[,11:90,with=F],1,median)),
+                                     "mean_80"=(apply(my_training[,11:90,with=F],1,mean)),
+                                     "sd_80"=(apply(my_training[,11:90,with=F],1,sd)),
+                                     
+                                     "max_70"=(apply(my_training[,21:90,with=F],1,max)),
+                                     "min_70"=(apply(my_training[,21:90,with=F],1,min)),
+                                     "median_70"=(apply(my_training[,21:90,with=F],1,median)),
+                                     "mean_70"=(apply(my_training[,21:90,with=F],1,mean)),
+                                     "sd_70"=(apply(my_training[,21:90,with=F],1,sd)),
+                                     
+                                     "max_60"=(apply(my_training[,31:90,with=F],1,max)),
+                                     "min_60"=(apply(my_training[,31:90,with=F],1,min)),
+                                     "median_60"=(apply(my_training[,31:90,with=F],1,median)),
+                                     "mean_60"=(apply(my_training[,31:90,with=F],1,mean)),
+                                     "sd_60"=(apply(my_training[,31:90,with=F],1,sd)),
+                                     
+                                     "max_50"=(apply(my_training[,41:90,with=F],1,max)),
+                                     "min_50"=(apply(my_training[,41:90,with=F],1,min)),
+                                     "median_50"=(apply(my_training[,41:90,with=F],1,median)),
+                                     "mean_50"=(apply(my_training[,41:90,with=F],1,mean)),
+                                     "sd_50"=(apply(my_training[,41:90,with=F],1,sd)),
+                                     
+                                     "max_40"=(apply(my_training[,51:90,with=F],1,max)),
+                                     "min_40"=(apply(my_training[,51:90,with=F],1,min)),
+                                     "median_40"=(apply(my_training[,51:90,with=F],1,median)),
+                                     "mean_40"=(apply(my_training[,51:90,with=F],1,mean)),
+                                     "sd_40"=(apply(my_training[,51:90,with=F],1,sd)),
+                                     
+                                     "max_30"=(apply(my_training[,61:90,with=F],1,max)),
+                                     "min_30"=(apply(my_training[,61:90,with=F],1,min)),
+                                     "median_30"=(apply(my_training[,61:90,with=F],1,median)),
+                                     "mean_30"=(apply(my_training[,61:90,with=F],1,mean)),
+                                     "sd_30"=(apply(my_training[,61:90,with=F],1,sd)),
+                                     
+                                     "max_20"=(apply(my_training[,71:90,with=F],1,max)),
+                                     "min_20"=(apply(my_training[,71:90,with=F],1,min)),
+                                     "median_20"=(apply(my_training[,71:90,with=F],1,median)),
+                                     "mean_20"=(apply(my_training[,71:90,with=F],1,mean)),
+                                     "sd_20"=(apply(my_training[,71:90,with=F],1,sd)),
+
+                                     "max_10"=(apply(my_training[,81:90,with=F],1,max)),
+                                     "min_10"=(apply(my_training[,81:90,with=F],1,min)),
+                                     "median_10"=(apply(my_training[,81:90,with=F],1,median)),
+                                     "mean_10"=(apply(my_training[,81:90,with=F],1,mean)),
+                                     "sd_10"=(apply(my_training[,81:90,with=F],1,sd)))]
+
+    return(my_training)
+}
+selected_feature <- function(my_dataset, my_case, my_feature){
+    if(max_90 %in% my_feature){my_training <- my_training[,':='("max_90"=(apply(my_training[,1:90,with=F],1,max)))]}
+    if(min_90 %in% my_feature){my_training <- my_training[,':='("min_90"=(apply(my_training[,1:90,with=F],1,min)))]}
+    if(median_90 %in% my_feature){my_training <- my_training[,':='("median_90"=(apply(my_training[,1:90,with=F],1,median)))]}
+    if(mean_90 %in% my_feature){my_training <- my_training[,':='("mean_90"=(apply(my_training[,1:90,with=F],1,mean)))]}
+    if(sd_90 %in% my_feature){my_training <- my_training[,':='("sd_90"=(apply(my_training[,1:90,with=F],1,sd)))]}
+    if(fc_90 %in% my_feature){my_training <- my_training[,':='("fc_90"=(apply(my_training[,1:90,with=F],1,function(x){feature_coefficient(x,my_case)})))]}
+    if(fm_90 %in% my_feature){my_training <- my_training[,':='("fm_90"=(apply(my_training[,1:90,with=F],1,feature_max_limit)))]}
+    
+    if(max_80 %in% my_feature){my_training <- my_training[,':='("max_80"=(apply(my_training[,11:90,with=F],1,max)))]}
+    if(min_80 %in% my_feature){my_training <- my_training[,':='("min_80"=(apply(my_training[,11:90,with=F],1,min)))]}
+    if(median_80 %in% my_feature){my_training <- my_training[,':='("median_80"=(apply(my_training[,11:90,with=F],1,median)))]}
+    if(mean_80 %in% my_feature){my_training <- my_training[,':='("mean_80"=(apply(my_training[,11:90,with=F],1,mean)))]}
+    if(sd_80 %in% my_feature){my_training <- my_training[,':='("sd_80"=(apply(my_training[,11:90,with=F],1,sd)))]}
+    if(fc_80 %in% my_feature){my_training <- my_training[,':='("fc_80"=(apply(my_training[,11:90,with=F],1,function(x){feature_coefficient(x,my_case)})))]}
+    if(fm_80 %in% my_feature){my_training <- my_training[,':='("fm_80"=(apply(my_training[,11:90,with=F],1,feature_max_limit)))]}
+     
+    if(max_70 %in% my_feature){my_training <- my_training[,':='("max_70"=(apply(my_training[,21:90,with=F],1,max)))]}
+    if(min_70 %in% my_feature){my_training <- my_training[,':='("min_70"=(apply(my_training[,21:90,with=F],1,min)))]}
+    if(median_70 %in% my_feature){my_training <- my_training[,':='("median_70"=(apply(my_training[,21:90,with=F],1,median)))]}
+    if(mean_70 %in% my_feature){my_training <- my_training[,':='("mean_70"=(apply(my_training[,21:90,with=F],1,mean)))]}
+    if(sd_70 %in% my_feature){my_training <- my_training[,':='("sd_70"=(apply(my_training[,21:90,with=F],1,sd)))]}
+    if(fc_70 %in% my_feature){my_training <- my_training[,':='("fc_70"=(apply(my_training[,21:90,with=F],1,function(x){feature_coefficient(x,my_case)})))]}
+    if(fm_70 %in% my_feature){my_training <- my_training[,':='("fm_70"=(apply(my_training[,21:90,with=F],1,feature_max_limit)))]}
+    
+    if(max_60 %in% my_feature){my_training <- my_training[,':='("max_60"=(apply(my_training[,31:90,with=F],1,max)))]}
+    if(min_60 %in% my_feature){my_training <- my_training[,':='("min_60"=(apply(my_training[,31:90,with=F],1,min)))]}
+    if(median_60 %in% my_feature){my_training <- my_training[,':='("median_60"=(apply(my_training[,31:90,with=F],1,median)))]}
+    if(mean_60 %in% my_feature){my_training <- my_training[,':='("mean_60"=(apply(my_training[,31:90,with=F],1,mean)))]}
+    if(sd_60 %in% my_feature){my_training <- my_training[,':='("sd_60"=(apply(my_training[,31:90,with=F],1,sd)))]}
+    if(fc_60 %in% my_feature){my_training <- my_training[,':='("fc_60"=(apply(my_training[,31:90,with=F],1,function(x){feature_coefficient(x,my_case)})))]}
+    if(fm_60 %in% my_feature){my_training <- my_training[,':='("fm_60"=(apply(my_training[,31:90,with=F],1,feature_max_limit)))]}
+    
+    if(max_50 %in% my_feature){my_training <- my_training[,':='("max_50"=(apply(my_training[,41:90,with=F],1,max)))]}
+    if(min_50 %in% my_feature){my_training <- my_training[,':='("min_50"=(apply(my_training[,41:90,with=F],1,min)))]}
+    if(median_50 %in% my_feature){my_training <- my_training[,':='("median_50"=(apply(my_training[,41:90,with=F],1,median)))]}
+    if(mean_50 %in% my_feature){my_training <- my_training[,':='("mean_50"=(apply(my_training[,41:90,with=F],1,mean)))]}
+    if(sd_50 %in% my_feature){my_training <- my_training[,':='("sd_50"=(apply(my_training[,41:90,with=F],1,sd)))]}
+    if(fc_50 %in% my_feature){my_training <- my_training[,':='("fc_50"=(apply(my_training[,41:90,with=F],1,function(x){feature_coefficient(x,my_case)})))]}
+    if(fm_50 %in% my_feature){my_training <- my_training[,':='("fm_50"=(apply(my_training[,41:90,with=F],1,feature_max_limit)))]}
+    
+    if(max_40 %in% my_feature){my_training <- my_training[,':='("max_40"=(apply(my_training[,41:90,with=F],1,max)))]}
+    if(min_40 %in% my_feature){my_training <- my_training[,':='("min_40"=(apply(my_training[,41:90,with=F],1,min)))]}
+    if(median_40 %in% my_feature){my_training <- my_training[,':='("median_40"=(apply(my_training[,41:90,with=F],1,median)))]}
+    if(mean_40 %in% my_feature){my_training <- my_training[,':='("mean_40"=(apply(my_training[,41:90,with=F],1,mean)))]}
+    if(sd_40 %in% my_feature){my_training <- my_training[,':='("sd_40"=(apply(my_training[,41:90,with=F],1,sd)))]}
+    if(fc_40 %in% my_feature){my_training <- my_training[,':='("fc_40"=(apply(my_training[,41:90,with=F],1,function(x){feature_coefficient(x,my_case)})))]}
+    if(fm_40 %in% my_feature){my_training <- my_training[,':='("fm_40"=(apply(my_training[,41:90,with=F],1,feature_max_limit)))]}
+    
+    if(max_30 %in% my_feature){my_training <- my_training[,':='("max_30"=(apply(my_training[,41:90,with=F],1,max)))]}
+    if(min_30 %in% my_feature){my_training <- my_training[,':='("min_30"=(apply(my_training[,41:90,with=F],1,min)))]}
+    if(median_30 %in% my_feature){my_training <- my_training[,':='("median_30"=(apply(my_training[,41:90,with=F],1,median)))]}
+    if(mean_30 %in% my_feature){my_training <- my_training[,':='("mean_30"=(apply(my_training[,41:90,with=F],1,mean)))]}
+    if(sd_30 %in% my_feature){my_training <- my_training[,':='("sd_30"=(apply(my_training[,41:90,with=F],1,sd)))]}
+    if(fc_30 %in% my_feature){my_training <- my_training[,':='("fc_30"=(apply(my_training[,41:90,with=F],1,function(x){feature_coefficient(x,my_case)})))]}
+    if(fm_30 %in% my_feature){my_training <- my_training[,':='("fm_30"=(apply(my_training[,41:90,with=F],1,feature_max_limit)))]}
+    
+    if(max_20 %in% my_feature){my_training <- my_training[,':='("max_20"=(apply(my_training[,41:90,with=F],1,max)))]}
+    if(min_20 %in% my_feature){my_training <- my_training[,':='("min_20"=(apply(my_training[,41:90,with=F],1,min)))]}
+    if(median_20 %in% my_feature){my_training <- my_training[,':='("median_20"=(apply(my_training[,41:90,with=F],1,median)))]}
+    if(mean_20 %in% my_feature){my_training <- my_training[,':='("mean_20"=(apply(my_training[,41:90,with=F],1,mean)))]}
+    if(sd_20 %in% my_feature){my_training <- my_training[,':='("sd_20"=(apply(my_training[,41:90,with=F],1,sd)))]}
+    if(fc_20 %in% my_feature){my_training <- my_training[,':='("fc_20"=(apply(my_training[,41:90,with=F],1,function(x){feature_coefficient(x,my_case)})))]}
+    if(fm_20 %in% my_feature){my_training <- my_training[,':='("fm_20"=(apply(my_training[,41:90,with=F],1,feature_max_limit)))]}
+    
+    if(max_10 %in% my_feature){my_training <- my_training[,':='("max_10"=(apply(my_training[,41:90,with=F],1,max)))]}
+    if(min_10 %in% my_feature){my_training <- my_training[,':='("min_10"=(apply(my_training[,41:90,with=F],1,min)))]}
+    if(median_10 %in% my_feature){my_training <- my_training[,':='("median_10"=(apply(my_training[,41:90,with=F],1,median)))]}
+    if(mean_10 %in% my_feature){my_training <- my_training[,':='("mean_10"=(apply(my_training[,41:90,with=F],1,mean)))]}
+    if(sd_10 %in% my_feature){my_training <- my_training[,':='("sd_10"=(apply(my_training[,41:90,with=F],1,sd)))]}
+    if(fc_10 %in% my_feature){my_training <- my_training[,':='("fc_10"=(apply(my_training[,41:90,with=F],1,function(x){feature_coefficient(x,my_case)})))]}
+    if(fm_10 %in% my_feature){my_training <- my_training[,':='("fm_10"=(apply(my_training[,41:90,with=F],1,feature_max_limit)))]}
+    
+    return(my_training)
+}
+    
 
 save.image(file="regression.RData")
 load(file="regression.RData")
 
-
-## depth_selection
-depth_selection <- function(my_training, my_test, cases=c(10,30,60)){
-    # my_training <- training_set
-    # my_test <- test_set
-    # cases <- c(10,30,60)
-    grid_1 <- expand.grid(.alpha = 1, .lambda = 0)
-    for(k in 1:length(cases)){
-        # k <- 1
-        my_case <- cases[k]
-        if(my_case==10){
-            my_training <- my_training[,':='("response"=y10)][,-c("y10", "y30", "y60"),with=F]
-            my_test <- my_test[,':='("response"=y10)][,-c("y10", "y30", "y60"),with=F]
-        }else if(my_case==30){
-            my_training <- my_training[,':='("response"=y30)][,-c("y10", "y30", "y60"),with=F]
-            my_test <- my_test[,':='("response"=y30)][,-c("y10", "y30", "y60"),with=F]
-        }else if(my_case==60){
-            my_training <- my_training[,':='("response"=y60)][,-c("y10", "y30", "y60"),with=F]
-            my_test <- my_test[,':='("response"=y60)][,-c("y10", "y30", "y60"),with=F]
-        }
-        
-        vect <- sort(unique(my_training[,ind]))
-        
-        vect_table <- NULL
-        for(i in 1:length(vect)){
-            # i<- 1
-            print(i)
-            temp_test_set <- my_test[ind==vect[i]][,-c("ind"),with=F]
-            temp_train <- my_training[ind==vect[i]][,-c("ind"),with=F]
-            temp_fold <- cbind(data.frame("fold"=1:nrow(temp_train)), temp_train)
-            folds <- createFolds(temp_fold[,"fold"], k = 6)
-            
-            row <- nrow(temp_train)
-            folds$Fold1 <- 1:trunc((row/6))
-            folds$Fold2 <- 1:(trunc((2*row/6)))
-            folds$Fold3 <- 1:(trunc((3*row/6)))
-            folds$Fold4 <- 1:(trunc((4*row/6)))
-            folds$Fold5 <- 1:(trunc((5*row/6)))
-            folds$Fold6 <- 1:row
-            
-            ## Génère les graines (reproduction des résultats) #length is = (n_repeats*nresampling)+1
-            set.seed(1)
-            seeds <- vector(mode = "list", length = 200)
-            for(i in 1:199) seeds[[i]]<- sample.int(n=1000, 199)
-            seeds[[200]]<-sample.int(1000, 200)
-            
-            ## Détermine rapidement la meilleure longueur
-            depth_score <- NULL
-            
-            control <- trainControl(method="cv", number=5, seeds=seeds, index=folds[1:5], indexOut = folds[2:6])
-            for(j in 1:9){
-                depth_training <- temp_train[,(1+(j-1)*10):91,with=F]
-                
-                cl <- makeCluster(3)
-                registerDoSNOW(cl)
-                model <- caret::train(response ~ .,
-                                      data=depth_training,
-                                      method = "glmnet",
-                                      metric="RMSE",
-                                      tuneGrid =grid_1,
-                                      trControl = control)
-                
-                depth_score <- c(depth_score, model$results$RMSE)
-            }
-            names(depth_score) <- c(1:9)
-            my_max <- max(depth_score)
-            depth_score <- depth_score[which(depth_score==my_max)]
-            depth_score <- as.numeric(names(depth_score[length(depth_score)]))
-            depth_score <- 1+(depth_score-1)*10
-            vect_table <- rbindlist(list(vect_table, data.table("case"=my_case, "ind"==vect[i], "depth"=depth_score)))
-        }
-    }
-    return(vect_table)
-}
-
-table_depth <- depth_selection(training_set, test_set, c(10,30,60))
-
-
-
 ## Apprentissage statistique
-ml_reg <- function(my_training, my_test, my_case, my_algo, my_eGrid, my_metric, my_type="raw", my_table_depth){
+ml_reg <- function(my_training, my_test, my_case, my_algo, my_eGrid, my_metric, my_type="raw"){
     # my_training <- training_set
     # my_test <- test_set
     # my_case <- 10
@@ -266,9 +316,8 @@ ml_reg <- function(my_training, my_test, my_case, my_algo, my_eGrid, my_metric, 
     # my_eGrid <- expand.grid(.maxdepth = c(10, 20, 30))
     # my_metric <- "qq_metric"
     # my_type <- "raw"
-    # grid_1 <- expand.grid(.alpha = 0, .lambda = 0)
-    # my_table_depth <- table_depth
     
+    grid_1 <- expand.grid(.alpha = 1, .lambda = 0)
     if(my_case==10){
         my_training <- my_training[,':='("response"=y10)][,-c("y10", "y30", "y60"),with=F]
         my_test <- my_test[,':='("response"=y10)][,-c("y10", "y30", "y60"),with=F]
@@ -286,60 +335,128 @@ ml_reg <- function(my_training, my_test, my_case, my_algo, my_eGrid, my_metric, 
     begin <- Sys.time()
     
     for(i in 1:length(vect)){
-        # i<- 1
         print(i)
         temp_test_set <- my_test[ind==vect[i]][,-c("ind"),with=F]
         temp_train <- my_training[ind==vect[i]][,-c("ind"),with=F]
-        temp_fold <- cbind(data.frame("fold"=1:nrow(temp_train)), temp_train)
-        folds <- createFolds(temp_fold[,"fold"], k = 6)
-
-        row <- nrow(temp_train)
-        folds$Fold1 <- 1:trunc((row/6))
-        folds$Fold2 <- 1:(trunc((2*row/6)))
-        folds$Fold3 <- 1:(trunc((3*row/6)))
-        folds$Fold4 <- 1:(trunc((4*row/6)))
-        folds$Fold5 <- 1:(trunc((5*row/6)))
-        folds$Fold6 <- 1:row
+        
+        if(nrow(temp_train)>=95){
+            temp_fold <- cbind(data.frame("fold"=1:nrow(temp_train)), temp_train)
+            folds_in <- createFolds(temp_fold[,"fold"], k = 5)
+            folds_out <- folds_in
+            row <- nrow(temp_train)
+            folds_in$Fold1 <- 1:trunc(row*90/95)
+            folds_in$Fold2 <- 1:trunc(row*91/95)
+            folds_in$Fold3 <- 1:trunc(row*92/95)
+            folds_in$Fold4 <- 1:trunc(row*93/95)
+            folds_in$Fold5 <- 1:trunc(row*94/95)
+            
+            folds_out$Fold1 <- (trunc(row*90/95)+1):trunc(row*91/95)
+            folds_out$Fold2 <- (trunc(row*91/95)+1):trunc(row*91/95)
+            folds_out$Fold3 <- (trunc(row*92/95)+1):trunc(row*91/95)
+            folds_out$Fold4 <- (trunc(row*93/95)+1):trunc(row*91/95)
+            folds_out$Fold5 <- (trunc(row*94/95)+1):trunc(row*91/95)
+            
+        }else{
+            print(c("1", i))
+        }
       
         ## Génère les graines (reproduction des résultats) #length is = (n_repeats*nresampling)+1
         set.seed(1)
         seeds <- vector(mode = "list", length = 200)
-        for(i in 1:199) seeds[[i]]<- sample.int(n=1000, 199)
+        for(j in 1:199) seeds[[j]]<- sample.int(n=1000, 199)
         seeds[[200]]<-sample.int(1000, 200)
 
-
-        depth_score <- my_table_depth[ind==vect[i]][case==my_case][,depth]
-        temp_train <- temp_train[,depth_score:91,with=F]
-        temp_test_set <- temp_test_set[,depth_score:91,with=F]
-        
+        temp_resp <- temp_train[, "response", with=F]
+        fe_sel <- add_feature(temp_train[, -c("response"), with=F], my_case)
+        training <- cbind(fe_sel, temp_resp)
         
         ## Paramètre la cross validation et la nature des résultats
         if(my_metric=="qq_metric"){
             if(my_type=="prob"){
                 ## Paramètre la cross validation et la nature des résultats
-                control <- trainControl(method="cv", number=5, seeds=seeds, index=folds[1:5], indexOut = folds[2:6], summaryFunction = quaqua_Summary_reg)
+                control <- trainControl(method="cv", number=5, seeds=seeds, index=folds_in, indexOut = folds_out, summaryFunction = quaqua_Summary_reg)
             }else if(my_type=="raw"){
-                control <- trainControl(method="cv", number=5, seeds=seeds, index=folds[1:5], indexOut = folds[2:6], summaryFunction = quaqua_Summary_reg)
+                control <- trainControl(method="cv", number=5, seeds=seeds, index=folds_in, indexOut = folds_out, summaryFunction = quaqua_Summary_reg)
             }
         }else{
             if(my_type=="prob"){
                 ## Paramètre la cross validation et la nature des résultats
-                control <- trainControl(method="cv", number=5, seeds=seeds, index=folds[1:5], indexOut = folds[2:6])
+                control <- trainControl(method="cv", number=5, seeds=seeds, index=folds_in, indexOut = folds_out)
             }else if(my_type=="raw"){
-                control <- trainControl(method="cv", number=5, seeds=seeds, index=folds[1:5], indexOut = folds[2:6])
+                control <- trainControl(method="cv", number=5, seeds=seeds, index=folds_in, indexOut = folds_out)
             }
         }
         
         cl <- makeCluster(3)
         registerDoSNOW(cl)
+        model <- caret::train(response ~ .,
+                              data=training,
+                              method = "glmnet",
+                              metric= "RMSE",
+                              preProcess = c("center","scale"),
+                              tuneGrid= grid_1,
+                              trControl = control)
+        stopCluster(cl)
+        importance <- varImp(model, scale=FALSE)
+        vec_t_value <- importance$importance$Overall
+        p_value <- t.test(vec_t_value)$conf.int[2]
+        significant_variable <- data.table("value"=importance$importance$Overall, "names"=names(training[,-c("response"),with=F]))
+        significant_variable <- significant_variable[value>=p_value][,names]
         
+        
+        # cl <- makeCluster(3)
+        # registerDoSNOW(cl)
+        # tryCatch({
+        #     model <- caret::train(response ~ .,
+        #                           data=  training,
+        #                           method = "glm",
+        #                           metric= my_metric,
+        #                           preProcess = c("center","scale"),
+        #                           trControl = control)
+        # 
+        #     
+        #     significant_variable <- summary(model)$coeff[-1,4] < 0.05
+        #     significant_variable <- unlist(lapply(significant_variable, function(x){ifelse(isTRUE(x), 1, 0)}))
+        #     significant_variable <-  names(significant_variable[which(significant_variable==1)])
+        #     if(length(significant_variable)==0){
+        #         significant_variable <- names(fe_sel)
+        #     }
+        # }, error = function(e) {
+        #     print(c(i, "1", e))
+        #     significant_variable <- names(fe_sel)
+        # })
+        # stopCluster(cl)
+        
+        
+        train_rep <- temp_train[, "response", with=F]
+        test_rep <- temp_test_set[, "response", with=F]
+        
+        temp_train <- add_feature(temp_train[, -c("response"), with=F], my_case)
+        temp_test_set <- add_feature(temp_test_set[, -c("response"), with=F], my_case)
+        
+        temp_train  <- cbind(temp_train[,c(significant_variable),with=F], train_rep)
+        temp_test_set  <- cbind(temp_test_set[,c(significant_variable),with=F], test_rep)
+      
+        cl <- makeCluster(3)
+        registerDoSNOW(cl)
+        
+        tryCatch({
         model <- caret::train(response ~ .,
                 data=temp_train,
                 method = my_algo,
                 tuneGrid = my_eGrid,
                 metric= my_metric,
+                preProcess = c("center","scale"),
                 trControl = control)
+        temp_predict <- data.table("ind"=vect[i], "predict"=predict(model, temp_test_set), 
+                                   temp_test_set[,"response",with=F])
 
+        }, error = function(e) {
+            print(c(i, "2", e))
+            temp_predict <- data.table("ind"=vect[i], "predict"=(-1), 
+                                       temp_test_set[,"response",with=F])
+        })
+        
         stopCluster(cl)
         
         temp_predict <- data.table("ind"=vect[i], "predict"=predict(model, temp_test_set), 
@@ -348,21 +465,21 @@ ml_reg <- function(my_training, my_test, my_case, my_algo, my_eGrid, my_metric, 
     }
     
     if(my_metric=="qq_metric"){
-        all_result <-  all_result[,':='("predict"=apply(all_result[,"predict",with=F],1,function(x){ifelse(x>=0, 1, 0)}),
+        all <-  copy(all_result)[,':='("predict"=apply(all_result[,"predict",with=F],1,function(x){ifelse(x>=0, 1, 0)}),
                                            "response"=apply(all_result[,"response",with=F],1,function(x){ifelse(x>=0, 1, 0)})
         )]
-        temp_pred <- unlist( all_result[,pred])
-        temp_obs <- unlist(all_result[,obs])
+        temp_pred <- unlist(all[,predict])
+        temp_obs <- unlist(all[,response])
         score <- best_score(temp_pred, temp_obs)
+        print(i)
     }else if(my_metric=="RMSE"){
         temp_pred <- unlist(all_result[,predict])
         temp_obs <- unlist(all_result[,response])
         score <- sqrt(sum((temp_pred - temp_obs)^2 , na.rm = TRUE)/length(temp_obs))
     }
-    temp_test <- unlist(test_set[! ind %in% vect][,response])
-    temp_test <- unlist(lapply(test_set,function(x){ifelse(x>=0,1,0)}))
-    temp_obs <- c(temp_obs, temp_test)
-    temp_pred <- c(temp_obs, rep(0,length(temp_test)))
+    temp_obs <- c(temp_obs, unlist(my_test[! ind %in% vect][,response]))
+    temp_obs <- unlist(lapply(temp_obs,function(x){ifelse(x>=0,1,0)}))
+    temp_pred <- c(temp_pred, rep(0, (length(temp_obs)-length(temp_pred))))
     score_final_entire <- best_score(temp_pred, temp_obs)
     time <- as.numeric(-(begin - Sys.time()))
     return(list("score"=score, "temps"=time, "case"=my_case, "algo"=my_algo, my_eGrid, "metric"=my_metric, "type"=my_type, "final"=score_final_entire))
@@ -374,157 +491,157 @@ ml_reg <- function(my_training, my_test, my_case, my_algo, my_eGrid, my_metric, 
 ### CART
 algo <- "rpart2"
 eGrid <- expand.grid(.maxdepth = c(10, 20, 30))
-simple_tree_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", "raw", table_depth)
-simple_tree_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", "raw", table_depth)
-simple_tree_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", "raw", table_depth)
-simple_tree_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", "raw", table_depth)
-simple_tree_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", "raw", table_depth)
-simple_tree_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw", table_depth)
+simple_tree_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", "raw")
+simple_tree_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", "raw")
+simple_tree_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", "raw")
+simple_tree_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", "raw")
+simple_tree_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", "raw")
+simple_tree_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw")
 
 
 ### Bagged CART
 algo <- "treebag"
 eGrid <- NULL
-Bagged_tree_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", , table_depth)
-Bagged_tree_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", , table_depth)
-Bagged_tree_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", , table_depth)
-Bagged_tree_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", , table_depth)
-Bagged_tree_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", , table_depth)
-Bagged_tree_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", , table_depth)
+Bagged_tree_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", "raw")
+Bagged_tree_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", "raw")
+Bagged_tree_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", "raw")
+Bagged_tree_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", "raw")
+Bagged_tree_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", "raw")
+Bagged_tree_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw")
 
 
 ### Boosted Tree
 algo <- "blackboost"
 eGrid <- expand.grid(.mstop = c(50, 100, 150, 200), .maxdepth = c(10, 20, 30))
-Boosted_tree_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", , table_depth)
-Boosted_tree_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", , table_depth)
-Boosted_tree_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", , table_depth)
-Boosted_tree_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", , table_depth)
-Boosted_tree_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", , table_depth)
-Boosted_tree_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", , table_depth)
+Boosted_tree_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", "raw")
+Boosted_tree_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", "raw")
+Boosted_tree_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", "raw")
+Boosted_tree_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", "raw")
+Boosted_tree_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", "raw")
+Boosted_tree_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw")
 
 
 ### Random Forest
 algo <- "ranger"
 eGrid <- expand.grid(.mtry = floor((1:floor(length(feature_10)/10))*10))
-rf_tree_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", , table_depth)
-rf_tree_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", , table_depth)
-rf_tree_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", , table_depth)
-rf_tree_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", , table_depth)
-rf_tree_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", , table_depth)
-rf_tree_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", , table_depth)
+rf_tree_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", "raw")
+rf_tree_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", "raw")
+rf_tree_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", "raw")
+rf_tree_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", "raw")
+rf_tree_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", "raw")
+rf_tree_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw")
 
 
 
 ############## Linear Model #################
 ## Generalized Linear Model
-algo <- "glm"
-eGrid <- NULL
-glm_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", , table_depth)
-glm_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", , table_depth)
-glm_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", , table_depth)
-glm_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", , table_depth)
-glm_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", , table_depth)
-glm_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", , table_depth)
+algo <- "glmnet"
+eGrid <- expand.grid(.alpha = 1, .lambda = 0)
+glm_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", "raw")
+glm_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", "raw")
+glm_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", "raw")
+glm_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", "raw")
+glm_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", "raw")
+glm_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw")
 
 
 ## L1 Logistic regression (lasso)
 algo <- "glmnet"
 eGrid <- expand.grid(.alpha = 1, .lambda = 10^-(-5:5))
-Lone_glm_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", , table_depth)
-Lone_glm_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", , table_depth)
-Lone_glm_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", , table_depth)
-Lone_glm_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", , table_depth)
-Lone_glm_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", , table_depth)
-Lone_glm_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw", table_depth)
+Lone_glm_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric")
+Lone_glm_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric")
+Lone_glm_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric")
+Lone_glm_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE")
+Lone_glm_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE")
+Lone_glm_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw")
 
 
 ## L2 Logistic regression (ridge)
 algo <- "glmnet"
 eGrid <- expand.grid(.alpha = 0, .lambda = 10^-(-5:5))
-Ltwo_glm_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", "raw", table_depth)
-Ltwo_glm_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", "raw", table_depth)
-Ltwo_glm_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", "raw", table_depth)
-Ltwo_glm_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", "raw", table_depth)
-Ltwo_glm_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", "raw", table_depth)
-Ltwo_glm_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw", table_depth)
+Ltwo_glm_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", "raw")
+Ltwo_glm_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", "raw")
+Ltwo_glm_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", "raw")
+Ltwo_glm_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", "raw")
+Ltwo_glm_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", "raw")
+Ltwo_glm_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw")
 
 
 ############### Plus proches voisins ###########
 algo <- "knn"
 eGrid <- expand.grid(.k = c(3, 6, 9, 12))
-knn_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", "raw", table_depth)
-knn_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", "raw", table_depth)
-knn_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", "raw", table_depth)
-knn_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", "raw", table_depth)
-knn_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", "raw", table_depth)
-knn_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw", table_depth)
+knn_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", "raw")
+knn_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", "raw")
+knn_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", "raw")
+knn_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", "raw")
+knn_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", "raw")
+knn_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw")
 
 ############### Réseaux de neurones ###########
 algo <- "mlp"
 eGrid <- expand.grid(.size = 1:5)
-rn_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", "raw", table_depth)
-rn_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", "raw", table_depth)
-rn_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", "raw", table_depth)
-rn_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", "raw", table_depth)
-rn_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", "raw", table_depth)
-rn_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw", table_depth)
+rn_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", "raw")
+rn_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", "raw")
+rn_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", "raw")
+rn_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", "raw")
+rn_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", "raw")
+rn_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw")
 
 
 ############### SVM ###########
 ### Linear Kernel
 algo <- "svmLinear"
 eGrid <- expand.grid(.C = c(10^(-5), 10^(-3), 10, 10^(3), 10^(6), 10^(9)))
-svmLinear_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", "raw", table_depth)
-svmLinear_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", "raw", table_depth)
-svmLinear_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", "raw", table_depth)
-svmLinear_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", "raw", table_depth)
-svmLinear_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", "raw", table_depth)
-svmLinear_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw", table_depth)
+svmLinear_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", "raw")
+svmLinear_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", "raw")
+svmLinear_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", "raw")
+svmLinear_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", "raw")
+svmLinear_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", "raw")
+svmLinear_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw")
 
 
 ### Radial Kernel
 algo <- "svmRadial"
 eGrid <- expand.grid(.C = c(10^(-5), 10^(-3), 10, 10^(3), 10^(6), 10^(9)), sigma=c(10^(-5), 10^(-3), 10^(-1), 10))
-svmRadial_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", "raw", table_depth)
-svmRadial_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", "raw", table_depth)
-svmRadial_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", "raw", table_depth)
-svmRadial_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", "raw", table_depth)
-svmRadial_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", "raw", table_depth)
-svmRadial_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw", table_depth)
+svmRadial_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", "raw")
+svmRadial_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", "raw")
+svmRadial_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", "raw")
+svmRadial_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", "raw")
+svmRadial_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", "raw")
+svmRadial_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw")
 
 
 ### Relevance Vector Machine wiLinear Kernel
 algo <- "rvmLinear"
 eGrid <- expand.grid(.C = c(10^(-5), 10^(-3), 10, 10^(3), 10^(6), 10^(9)))
-svmLinear_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", "raw", table_depth)
-svmLinear_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", "raw", table_depth)
-svmLinear_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", "raw", table_depth)
-svmLinear_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", "raw", table_depth)
-svmLinear_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", "raw", table_depth)
-svmLinear_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw", table_depth)
+svmLinear_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", "raw")
+svmLinear_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", "raw")
+svmLinear_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", "raw")
+svmLinear_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", "raw")
+svmLinear_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", "raw")
+svmLinear_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw")
 
 
 ### Radial Kernel
 algo <- "rvmRadial"
 eGrid <- expand.grid(.C = c(10^(-5), 10^(-3), 10, 10^(3), 10^(6), 10^(9)), sigma=c(10^(-5), 10^(-3), 10^(-1), 10))
-svmRadial_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", "raw", table_depth)
-svmRadial_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", "raw", table_depth)
-svmRadial_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", "raw", table_depth)
-svmRadial_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", "raw", table_depth)
-svmRadial_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", "raw", table_depth)
-svmRadial_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw", table_depth)
+svmRadial_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", "raw")
+svmRadial_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", "raw")
+svmRadial_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", "raw")
+svmRadial_10_acc <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", "raw")
+svmRadial_30_acc <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", "raw")
+svmRadial_60_acc <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw")
 
 
 ### Bayesian Generalized Linear Model
 algo <- "arm"
 eGrid <- NULL
-arm_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", "raw", table_depth)
-arm_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", "raw", table_depth)
-arm_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", "raw", table_depth)
-arm_10_kap <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", "raw", table_depth)
-arm_30_kap <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", "raw", table_depth)
-arm_60_kap <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw", table_depth)
+arm_10_qq <- ml_reg(training_set, test_set, 10, algo, eGrid, "qq_metric", "raw")
+arm_30_qq <- ml_reg(training_set, test_set, 30, algo, eGrid, "qq_metric", "raw")
+arm_60_qq <- ml_reg(training_set, test_set, 60, algo, eGrid, "qq_metric", "raw")
+arm_10_kap <- ml_reg(training_set, test_set, 10, algo, eGrid, "RMSE", "raw")
+arm_30_kap <- ml_reg(training_set, test_set, 30, algo, eGrid, "RMSE", "raw")
+arm_60_kap <- ml_reg(training_set, test_set, 60, algo, eGrid, "RMSE", "raw")
 
 
-
+save.image(file="regression_2.RData")

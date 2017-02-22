@@ -72,6 +72,9 @@ P_30_test <- nrow(test_set[y30=="YES"])
 ## Cas 60 - 580
 P_60_test <- nrow(test_set[y60=="YES"])
 
+#####################################################
+#### ##################### FIltres ##################
+#####################################################
 ### Filter  coefficient
 filtre_coefficient <- function(my_vector, my_case=10, my_limit=1){
     my_vector <- unlist(my_vector)
@@ -95,25 +98,9 @@ training_set <- training_set[,":="("fc"=apply(training_set[,2:91,with=F],1,funct
                                        "fm"=apply(training_set[,2:91,with=F],1,filtre_max_limit))][fc==1][fm==1][,-c("fc", "fm"),with=F]
 
 
-## Nouvelles features à ajouter
-feature_coefficient <- function(my_vector, my_case, my_limit=1){
-  my_vector <- unlist(my_vector)
-  if(length(my_vector[!is.na(my_vector)>2]) && !is.na(my_vector[length(my_vector)])){
-    l_last_value <- my_vector[length(my_vector)]
-    my_vector <- diff(my_vector, 1)
-    my_vector <- my_vector[!is.na(my_vector)]
-    my_vector <- lapply(my_vector, function(x){x*my_case+l_last_value})
-    return(length(my_vector[which(my_vector>1)]))
-  }else{
-    return(0)
-  }
-}
-feature_max_limit <- function(my_vector){
-  my_vector <- unlist(my_vector)
-  my_vector <- length(my_vector[which(my_vector>=1)])
-}
-
-
+#####################################################
+#### #####################  Score functions #########
+#####################################################
 ## Optimise le score d'après la métrique de score
 best_score <- function(pred, obs, th=NULL, mu=10^(-10), delta=0.01, alpha=2, beta=1, stand=7){
     result <- data.table("obs"=obs, "pred"=pred)
@@ -135,7 +122,6 @@ best_score <- function(pred, obs, th=NULL, mu=10^(-10), delta=0.01, alpha=2, bet
     return(score)
 }
 
-
 ## Donne la matrice de confusion
 get_confusion <- function(x){
     x <- unlist(x)
@@ -147,7 +133,6 @@ get_confusion <- function(x){
         }else if(x[2]==0){return("TN")}
     }
 }
-
 
 ## Métrique définie (contient deux autres fonctions pour les intégrer dans les clusters de DoSnow)
 quaqua_Summary_cl <- function (data, lev = NULL, model = NULL) {
@@ -190,10 +175,13 @@ quaqua_Summary_cl <- function (data, lev = NULL, model = NULL) {
     
     obs <- as.character(unlist(data$obs))
     obs <- unlist(lapply(obs, function(x){ifelse(x=="YES", 1,0)}))
+    # obs[obs=="YES"] <- 1
+    # obs[obs=="NO"] <- 0
     
     if("YES" %in% names(data)){
         pred <- unlist(data$YES)
-        pred <- unlist(lapply(pred, function(x){ifelse(is.na(x), 0, x)}))
+        pred[is.na(pred)] <- 0
+        # pred <- unlist(lapply(pred, function(x){ifelse(is.na(x), 0, x)}))
         if(length(pred)==0){
             score <- NA
         }else{
@@ -203,7 +191,7 @@ quaqua_Summary_cl <- function (data, lev = NULL, model = NULL) {
             score <- 0
             th <- sort(unique(c(0, pred, 1)),decreasing = TRUE)
             temp_th <- th
-            for(i in 1:6){
+            for(i in 1:9){
                 # i <- 1
                 puis <- 10^(i)
                 temp_seuil <- unique(trunc(temp_th*(puis))/puis)
@@ -242,11 +230,14 @@ quaqua_Summary_cl <- function (data, lev = NULL, model = NULL) {
         }
     }else if("pred"  %in% names(data)){
         pred <- as.character(unlist(data$pred))
-        pred <- unlist(lapply(pred, function(x){ifelse(is.na(x), 0, x)}))
+        pred[is.na(pred)] <- 0
+        # pred <- unlist(lapply(pred, function(x){ifelse(is.na(x), 0, x)}))
         if(length(pred)==0){
             score <- NA
         }else{
-            pred <- unlist(lapply(pred, function(x){ifelse(x=="YES", 1,0)}))
+            pred[pred=="YES"] <- 1
+            pred[pred=="NO"] <- 0
+            # pred <- unlist(lapply(pred, function(x){ifelse(x=="YES", 1,0)}))
             score <- best_score(pred, obs, 0.5)
         }
     }else{
@@ -255,18 +246,7 @@ quaqua_Summary_cl <- function (data, lev = NULL, model = NULL) {
     out <- score
     names(out) <- "qq_metric"
     out
-    # 
-    # if (any(is.nan(out))) 
-    #     out[is.nan(out)] <- NA
-    # out
-    
-    # }, error = function(e) {
-    #     saveRDS(data, "data.rds")
-    #     print(e)
-    # 
-    # })
 }
-
 
 ## Métrique définie (contient deux autres fonctions pour les intégrer dans les clusters de DoSnow)
 ROC_Summary <- function (data, lev = NULL, model = NULL) {
@@ -275,14 +255,19 @@ ROC_Summary <- function (data, lev = NULL, model = NULL) {
         # data <- readRDS("data.rds")
 
         obs <- as.character(unlist(data$obs))
-        obs <- unlist(lapply(obs, function(x){ifelse(x=="YES", 1,0)}))
-
+        obs[obs=="YES"] <- 1
+        obs[obs=="NO"] <- 0
+ 
         if("YES" %in% names(data)){
             pred <- unlist(data$YES)
-            pred <- unlist(lapply(pred, function(x){ifelse(is.na(x), 0, x)}))
+            pred[is.na(pred)] <- 0
+            # pred <- unlist(lapply(pred, function(x){ifelse(is.na(x), 0, x)}))
             score <- roc(response=obs,predictor= pred)
         }else if("pred"  %in% names(data)){
             pred <- as.character(unlist(data$pred))
+            pred[is.na(pred)] <- 0
+            # pred[pred=="NO"] <- 0
+            # pred[pred=="YES"] <- 0
             pred <- unlist(lapply(pred, function(x){ifelse(is.na(x) || x=="NO", 0, 1)}))
             score <- roc(response=obs,predictor= pred)
         }
@@ -295,162 +280,147 @@ ROC_Summary <- function (data, lev = NULL, model = NULL) {
 }
 
 
+#####################################################
+#### #####################  FE #########
+#####################################################
+
+## Ajoute de nouvelles features
+add_feature <- function(my_training, my_case){
+    my_training <- my_training[,':='("max_90"=(apply(my_training[,1:90,with=F],1,max)),
+                                     "min_90"=(apply(my_training[,1:90,with=F],1,min)),
+                                     "median_90"=(apply(my_training[,1:90,with=F],1,median)),
+                                     "mean_90"=(apply(my_training[,1:90,with=F],1,mean)),
+                                     "sd_90"=(apply(my_training[,1:90,with=F],1,sd)),
+                                     
+                                     "max_80"=(apply(my_training[,11:90,with=F],1,max)),
+                                     "min_80"=(apply(my_training[,11:90,with=F],1,min)),
+                                     "median_80"=(apply(my_training[,11:90,with=F],1,median)),
+                                     "mean_80"=(apply(my_training[,11:90,with=F],1,mean)),
+                                     "sd_80"=(apply(my_training[,11:90,with=F],1,sd)),
+                                     
+                                     "max_70"=(apply(my_training[,21:90,with=F],1,max)),
+                                     "min_70"=(apply(my_training[,21:90,with=F],1,min)),
+                                     "median_70"=(apply(my_training[,21:90,with=F],1,median)),
+                                     "mean_70"=(apply(my_training[,21:90,with=F],1,mean)),
+                                     "sd_70"=(apply(my_training[,21:90,with=F],1,sd)),
+                                     
+                                     "max_60"=(apply(my_training[,31:90,with=F],1,max)),
+                                     "min_60"=(apply(my_training[,31:90,with=F],1,min)),
+                                     "median_60"=(apply(my_training[,31:90,with=F],1,median)),
+                                     "mean_60"=(apply(my_training[,31:90,with=F],1,mean)),
+                                     "sd_60"=(apply(my_training[,31:90,with=F],1,sd)),
+                                     
+                                     "max_50"=(apply(my_training[,41:90,with=F],1,max)),
+                                     "min_50"=(apply(my_training[,41:90,with=F],1,min)),
+                                     "median_50"=(apply(my_training[,41:90,with=F],1,median)),
+                                     "mean_50"=(apply(my_training[,41:90,with=F],1,mean)),
+                                     "sd_50"=(apply(my_training[,41:90,with=F],1,sd)),
+                                     
+                                     "max_40"=(apply(my_training[,51:90,with=F],1,max)),
+                                     "min_40"=(apply(my_training[,51:90,with=F],1,min)),
+                                     "median_40"=(apply(my_training[,51:90,with=F],1,median)),
+                                     "mean_40"=(apply(my_training[,51:90,with=F],1,mean)),
+                                     "sd_40"=(apply(my_training[,51:90,with=F],1,sd)),
+                                     
+                                     "max_30"=(apply(my_training[,61:90,with=F],1,max)),
+                                     "min_30"=(apply(my_training[,61:90,with=F],1,min)),
+                                     "median_30"=(apply(my_training[,61:90,with=F],1,median)),
+                                     "mean_30"=(apply(my_training[,61:90,with=F],1,mean)),
+                                     "sd_30"=(apply(my_training[,61:90,with=F],1,sd)),
+                                     
+                                     "max_20"=(apply(my_training[,71:90,with=F],1,max)),
+                                     "min_20"=(apply(my_training[,71:90,with=F],1,min)),
+                                     "median_20"=(apply(my_training[,71:90,with=F],1,median)),
+                                     "mean_20"=(apply(my_training[,71:90,with=F],1,mean)),
+                                     "sd_20"=(apply(my_training[,71:90,with=F],1,sd)),
+                                     
+                                     "max_10"=(apply(my_training[,81:90,with=F],1,max)),
+                                     "min_10"=(apply(my_training[,81:90,with=F],1,min)),
+                                     "median_10"=(apply(my_training[,81:90,with=F],1,median)),
+                                     "mean_10"=(apply(my_training[,81:90,with=F],1,mean)),
+                                     "sd_10"=(apply(my_training[,81:90,with=F],1,sd)))]
+    
+    return(my_training)
+}
+
 ## Trouve les meilleures features pour chaque cas
-get_features <- function(my_training=training_set, my_test=test_set, my_case){
-    # my_case <- 10
+get_features <- function(my_training=training_set, my_test=test_set, case=c(10, 30, 60)){
     # my_training <- training_set
     # my_test <- test_set
-    
-    if(my_case==10){
-        my_training <- my_training[,':='("response"=y10)][,-c("y10", "y30", "y60"),with=F]
-        my_test <- my_test[,':='("response"=y10)][,-c("y10", "y30", "y60"),with=F]
-    }else if(my_case==30){
-        my_training <- my_training[,':='("response"=y30)][,-c("y10", "y30", "y60"),with=F]
-        my_test <- my_test[,':='("response"=y30)][,-c("y10", "y30", "y60"),with=F]
-    }else if(my_case==60){
-        my_training <- my_training[,':='("response"=y60)][,-c("y10", "y30", "y60"),with=F]
-        my_test <- my_test[,':='("response"=y60)][,-c("y10", "y30", "y60"),with=F]
+    table_feature <- NULL
+    init_training <- my_training
+    init_test <- my_test
+    grid_1 <- expand.grid(.alpha = 1, .lambda = 0)
+    for(c in 1:length(case)){
+        # c <- 1
+        my_case <- case[c]
+        if(my_case==10){
+            my_training <- init_training[,':='("response"=y10)][,-c("y10", "y30", "y60", "ind"),with=F]
+            my_test <- init_test [,':='("response"=y10)][,-c("y10", "y30", "y60"),with=F]
+        }else if(my_case==30){
+            my_training <- init_training[,':='("response"=y30)][,-c("y10", "y30", "y60", "ind"),with=F]
+            my_test <-  init_test[,':='("response"=y30)][,-c("y10", "y30", "y60"),with=F]
+        }else if(my_case==60){
+            my_training <- init_training[,':='("response"=y60)][,-c("y10", "y30", "y60", "ind"),with=F]
+            my_test <- init_test[,':='("response"=y60)][,-c("y10", "y30", "y60"),with=F]
+        }
+          
+        ### Génération de features mathématique simple pour chaque dimension d%%10 de 10 à 90
+        temp_resp <- my_training[, "response", with=F]
+        fe_sel <- add_feature(my_training[, -c("response"), with=F], my_case)
+        training <- cbind(fe_sel, temp_resp)
+      
+        ## Génère les graines (reproduction des résultats) #length is = (n_repeats*nresampling)+1
+        set.seed(1)
+        seeds <- vector(mode = "list", length = 200)
+        for(j in 1:199) seeds[[j]]<- sample.int(n=1000, 199)
+        seeds[[200]]<-sample.int(1000, 200)
+            
+        ## Créé les k-folds
+        temp_fold <- cbind(data.frame("fold"=1:nrow(training)),  training)
+        nb_row <- 1:nrow(temp_fold)
+        folds_in <- createFolds(temp_fold[,"fold"], k = 5)
+        folds_out <- folds_in
+        folds_in$Fold1 <- nb_row[! nb_row %in% folds_in$Fold1]
+        folds_in$Fold2 <- nb_row[! nb_row %in% folds_in$Fold2]
+        folds_in$Fold3 <- nb_row[! nb_row %in% folds_in$Fold3]
+        folds_in$Fold4 <- nb_row[! nb_row %in% folds_in$Fold4]
+        folds_in$Fold5 <- nb_row[! nb_row %in% folds_in$Fold5]
+            
+        my_metri <- "my_ROC"
+        ## Paramètre la cross validation et la nature des résultats
+        control <- trainControl(method="cv", number=5, seeds=seeds, index=folds_in, indexOut=folds_out, summaryFunction=ROC_Summary, classProbs=TRUE)
+       
+        training <- training[,response:=as.factor(response)]
+        temp_train <- as.data.frame(training[,-c("response"),with=F])
+        temp_test <- unlist((training[,"response",with=F]))
+            
+        ## Test de student
+        cl <- makeCluster(3)
+        registerDoSNOW(cl)
+        model <- caret::train(x=temp_train,
+                                  y=temp_test,
+                                  method = "glmnet",
+                                  preProcess = c("center","scale"),
+                                  tuneGrid= grid_1,
+                                  trControl = control)
+        stopCluster(cl)
+        importance <- varImp(model, scale=FALSE)
+        vec_t_value <- importance$importance$Overall
+        p_value <- t.test(vec_t_value)$conf.int[2]
+        significant_variable <- data.table("value"=importance$importance$Overall, "names"=names(temp_train))
+        significant_variable <- significant_variable[value>=p_value][,names]
+        if(length(significant_variable)==0){
+            significant_variable <- names(fe_sel)
+        }
+        table_feature <- rbindlist(list(table_feature, data.table("case"=my_case, "var"=significant_variable)))
     }
-  
-    ### Génération de features mathématique simple pour chaque dimension d%%10 de 10 à 90
-    my_training <- my_training[,':='("max_90"=(apply(my_training[,2:91,with=F],1,max)),
-                                     "min_90"=(apply(my_training[,2:91,with=F],1,min)),
-                                     "median_90"=(apply(my_training[,2:91,with=F],1,median)),
-                                     "mean_90"=(apply(my_training[,2:91,with=F],1,mean)),
-                                     "sd_90"=(apply(my_training[,2:91,with=F],1,sd)),
-                                     "fc_90"=(apply(my_training[,2:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                                     "fm_90"=(apply(my_training[,2:91,with=F],1,feature_max_limit)),
-                                     
-                                     "max_80"=(apply(my_training[,12:91,with=F],1,max)),
-                                     "min_80"=(apply(my_training[,12:91,with=F],1,min)),
-                                     "median_80"=(apply(my_training[,12:91,with=F],1,median)),
-                                     "mean_80"=(apply(my_training[,12:91,with=F],1,mean)),
-                                     "sd_80"=(apply(my_training[,12:91,with=F],1,sd)),
-                                     "fc_80"=(apply(my_training[,12:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                                     "fm_80"=(apply(my_training[,12:91,with=F],1,feature_max_limit)),
-                                     
-                                     
-                                     "max_70"=(apply(my_training[,22:91,with=F],1,max)),
-                                     "min_70"=(apply(my_training[,22:91,with=F],1,min)),
-                                     "median_70"=(apply(my_training[,22:91,with=F],1,median)),
-                                     "mean_70"=(apply(my_training[,22:91,with=F],1,mean)),
-                                     "sd_70"=(apply(my_training[,22:91,with=F],1,sd)),
-                                     "fc_70"=(apply(my_training[,22:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                                     "fm_70"=(apply(my_training[,22:91,with=F],1,feature_max_limit)),
-                                     
-                                     "max_60"=(apply(my_training[,32:91,with=F],1,max)),
-                                     "min_60"=(apply(my_training[,32:91,with=F],1,min)),
-                                     "median_60"=(apply(my_training[,32:91,with=F],1,median)),
-                                     "mean_60"=(apply(my_training[,32:91,with=F],1,mean)),
-                                     "sd_60"=(apply(my_training[,32:91,with=F],1,sd)),
-                                     "fc_60"=(apply(my_training[,32:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                                     "fm_60"=(apply(my_training[,32:91,with=F],1,feature_max_limit)),
-                                     
-                                     "max_50"=(apply(my_training[,42:91,with=F],1,max)),
-                                     "min_50"=(apply(my_training[,42:91,with=F],1,min)),
-                                     "median_50"=(apply(my_training[,42:91,with=F],1,median)),
-                                     "mean_50"=(apply(my_training[,42:91,with=F],1,mean)),
-                                     "sd_50"=(apply(my_training[,42:91,with=F],1,sd)),
-                                     "fc_50"=(apply(my_training[,42:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                                     "fm_50"=(apply(my_training[,42:91,with=F],1,feature_max_limit)),
-                                     
-                                     "max_40"=(apply(my_training[,52:91,with=F],1,max)),
-                                     "min_40"=(apply(my_training[,52:91,with=F],1,min)),
-                                     "median_40"=(apply(my_training[,52:91,with=F],1,median)),
-                                     "mean_40"=(apply(my_training[,52:91,with=F],1,mean)),
-                                     "sd_40"=(apply(my_training[,52:91,with=F],1,sd)),
-                                     "fc_40"=(apply(my_training[,52:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                                     "fm_40"=(apply(my_training[,52:91,with=F],1,feature_max_limit)),
-                                     
-                                     "max_30"=(apply(my_training[,62:91,with=F],1,max)),
-                                     "min_30"=(apply(my_training[,62:91,with=F],1,min)),
-                                     "median_30"=(apply(my_training[,62:91,with=F],1,median)),
-                                     "mean_30"=(apply(my_training[,62:91,with=F],1,mean)),
-                                     "sd_30"=(apply(my_training[,62:91,with=F],1,sd)),
-                                     "fc_30"=(apply(my_training[,62:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                                     "fm_30"=(apply(my_training[,62:91,with=F],1,feature_max_limit)),
-                                     
-                                     "max_20"=(apply(my_training[,72:91,with=F],1,max)),
-                                     "min_20"=(apply(my_training[,72:91,with=F],1,min)),
-                                     "median_20"=(apply(my_training[,72:91,with=F],1,median)),
-                                     "mean_20"=(apply(my_training[,72:91,with=F],1,mean)),
-                                     "sd_20"=(apply(my_training[,72:91,with=F],1,sd)),
-                                     "fc_20"=(apply(my_training[,72:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                                     "fm_20"=(apply(my_training[,72:91,with=F],1,feature_max_limit)),
-                                     
-                                     "max_10"=(apply(my_training[,82:91,with=F],1,max)),
-                                     "min_10"=(apply(my_training[,82:91,with=F],1,min)),
-                                     "median_10"=(apply(my_training[,82:91,with=F],1,median)),
-                                     "mean_10"=(apply(my_training[,82:91,with=F],1,mean)),
-                                     "sd_10"=(apply(my_training[,82:91,with=F],1,sd)),
-                                     "fc_10"=(apply(my_training[,82:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                                     "fm_10"=(apply(my_training[,82:91,with=F],1,feature_max_limit)))]
-
-      #### Supprime les colonnes qui sont trop corrélées
-      correlationMatrix <- cor(my_training[,-c("ind", "response"),with=F])
-      highlyCorrelated <- sort(findCorrelation(correlationMatrix, cutoff=0.95))
-      temp_my_training <- my_training[,-c("ind", "response"),with=F]
-      while(length(highlyCorrelated)>0){
-          temp_my_training <- temp_my_training[,-c(highlyCorrelated[1]),with=F]
-          correlationMatrix <- cor(temp_my_training)
-          highlyCorrelated <- sort(findCorrelation(correlationMatrix, cutoff=0.95))
-          if(length(highlyCorrelated)>=2){
-              highlyCorrelated <- highlyCorrelated[2:length(highlyCorrelated)]
-          }else{
-              break
-          }
-      }
-      my_training <- cbind(my_training[,c("ind"),with=F], temp_my_training, my_training[,c("response"),with=F])
-  
-      #### Feature selection avec les forêts aléatoires
-      ## Créer une liste de "seeds" pour la reproduction des résultats
-      set.seed(1)
-      #length is = (n_repeats*nresampling)+1
-      seeds <- vector(mode = "list", length = 11)
-      #(3 is the number of tuning parameter, mtry for rf, here equal to ncol(iris)-2)
-      for(i in 1:10) seeds[[i]]<- sample.int(n=1000, ncol(my_training[,-c("ind", "response"),with=F]))
-      #for the last model
-      seeds[[11]]<-sample.int(1000, 1)
-      
-      ## Transform en facteur pour le modèle
-      my_training <- my_training[,response:=as.factor(response)]
-      
-      temp_train <- as.data.frame(my_training[,-c("ind", "response"),with=F])
-      temp_test <- unlist((my_training[,"response",with=F]))
-      
-      #  Créé les k-folds
-      temp_fold <- cbind(data.frame("fold"=1:nrow(temp_train)), temp_train)
-      folds <- createFolds(temp_fold[,"fold"], k = 5)
-      
-      ## Feature selection algorithm
-      control <- rfeControl(functions=rfFuncs, 
-                            method="cv", 
-                            number=5, 
-                            seeds=seeds, 
-                            index = folds)
-
-      cl <- makeCluster(3)
-      registerDoSNOW(cl)
-    
-      system.time({
-      results <- rfe(x=temp_train,  
-                     y=temp_test, 
-                     sizes=c(1:ncol(temp_train)),
-                     rfeControl=control,
-                     preProcess = c("center","scale"),
-                     rerank=F)
-      })
-      stopCluster(cl)
-      col_keep <- names(results$fit$forest$ncat)
-      return(col_keep)
+    return(table_feature)
 }
-feature_10 <- get_features(my_training=training_set, my_test=test_set, 10)
-feature_30 <- get_features(my_training=training_set, my_test=test_set, 30)
-feature_60 <- get_features(my_training=training_set, my_test=test_set, 60)
-
+table_feature <- get_features(my_training=training_set, my_test=test_set, case=c(10, 30, 60))
 
 ## Applique les features
-tr_feature <- function(my_training=training_set, my_test=test_set,my_feature, my_case){
+tr_feature <- function(my_training=training_set, my_test=test_set, table_feature, my_case, my_metric){
     if(my_case==10){
         my_training <- my_training[,':='("response"=y10)][,-c("y10", "y30", "y60"),with=F]
         my_test <- my_test[,':='("response"=y10)][,-c("y10", "y30", "y60"),with=F]
@@ -462,185 +432,139 @@ tr_feature <- function(my_training=training_set, my_test=test_set,my_feature, my
         my_test <- my_test[,':='("response"=y60)][,-c("y10", "y30", "y60"),with=F]
     }
   
-  my_training <- my_training[,':='("max_90"=(apply(my_training[,2:91,with=F],1,max)),
+    feature <- unlist(table_feature[case==my_case][,var])
+    
+    my_training <- my_training[,':='("max_90"=(apply(my_training[,2:91,with=F],1,max)),
                                    "min_90"=(apply(my_training[,2:91,with=F],1,min)),
                                    "median_90"=(apply(my_training[,2:91,with=F],1,median)),
                                    "mean_90"=(apply(my_training[,2:91,with=F],1,mean)),
                                    "sd_90"=(apply(my_training[,2:91,with=F],1,sd)),
-                                   "fc_90"=(apply(my_training[,2:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                                   "fm_90"=(apply(my_training[,2:91,with=F],1,feature_max_limit)),
-                                   
+                                 
                                    "max_80"=(apply(my_training[,12:91,with=F],1,max)),
                                    "min_80"=(apply(my_training[,12:91,with=F],1,min)),
                                    "median_80"=(apply(my_training[,12:91,with=F],1,median)),
                                    "mean_80"=(apply(my_training[,12:91,with=F],1,mean)),
                                    "sd_80"=(apply(my_training[,12:91,with=F],1,sd)),
-                                   "fc_80"=(apply(my_training[,12:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                                   "fm_80"=(apply(my_training[,12:91,with=F],1,feature_max_limit)),
                                    
                                    "max_70"=(apply(my_training[,22:91,with=F],1,max)),
                                    "min_70"=(apply(my_training[,22:91,with=F],1,min)),
                                    "median_70"=(apply(my_training[,22:91,with=F],1,median)),
                                    "mean_70"=(apply(my_training[,22:91,with=F],1,mean)),
                                    "sd_70"=(apply(my_training[,22:91,with=F],1,sd)),
-                                   "fc_70"=(apply(my_training[,22:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                                   "fm_70"=(apply(my_training[,22:91,with=F],1,feature_max_limit)),
                                    
                                    "max_60"=(apply(my_training[,32:91,with=F],1,max)),
                                    "min_60"=(apply(my_training[,32:91,with=F],1,min)),
                                    "median_60"=(apply(my_training[,32:91,with=F],1,median)),
                                    "mean_60"=(apply(my_training[,32:91,with=F],1,mean)),
                                    "sd_60"=(apply(my_training[,32:91,with=F],1,sd)),
-                                   "fc_60"=(apply(my_training[,32:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                                   "fm_60"=(apply(my_training[,32:91,with=F],1,feature_max_limit)),
                                    
                                    "max_50"=(apply(my_training[,42:91,with=F],1,max)),
                                    "min_50"=(apply(my_training[,42:91,with=F],1,min)),
                                    "median_50"=(apply(my_training[,42:91,with=F],1,median)),
                                    "mean_50"=(apply(my_training[,42:91,with=F],1,mean)),
                                    "sd_50"=(apply(my_training[,42:91,with=F],1,sd)),
-                                   "fc_50"=(apply(my_training[,42:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                                   "fm_50"=(apply(my_training[,42:91,with=F],1,feature_max_limit)),
                                    
                                    "max_40"=(apply(my_training[,52:91,with=F],1,max)),
                                    "min_40"=(apply(my_training[,52:91,with=F],1,min)),
                                    "median_40"=(apply(my_training[,52:91,with=F],1,median)),
                                    "mean_40"=(apply(my_training[,52:91,with=F],1,mean)),
                                    "sd_40"=(apply(my_training[,52:91,with=F],1,sd)),
-                                   "fc_40"=(apply(my_training[,52:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                                   "fm_40"=(apply(my_training[,52:91,with=F],1,feature_max_limit)),
                                    
                                    "max_30"=(apply(my_training[,62:91,with=F],1,max)),
                                    "min_30"=(apply(my_training[,62:91,with=F],1,min)),
                                    "median_30"=(apply(my_training[,62:91,with=F],1,median)),
                                    "mean_30"=(apply(my_training[,62:91,with=F],1,mean)),
                                    "sd_30"=(apply(my_training[,62:91,with=F],1,sd)),
-                                   "fc_30"=(apply(my_training[,62:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                                   "fm_30"=(apply(my_training[,62:91,with=F],1,feature_max_limit)),
                                    
                                    "max_20"=(apply(my_training[,72:91,with=F],1,max)),
                                    "min_20"=(apply(my_training[,72:91,with=F],1,min)),
                                    "median_20"=(apply(my_training[,72:91,with=F],1,median)),
                                    "mean_20"=(apply(my_training[,72:91,with=F],1,mean)),
                                    "sd_20"=(apply(my_training[,72:91,with=F],1,sd)),
-                                   "fc_20"=(apply(my_training[,72:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                                   "fm_20"=(apply(my_training[,72:91,with=F],1,feature_max_limit)),
-                                   
+
                                    "max_10"=(apply(my_training[,82:91,with=F],1,max)),
                                    "min_10"=(apply(my_training[,82:91,with=F],1,min)),
                                    "median_10"=(apply(my_training[,82:91,with=F],1,median)),
                                    "mean_10"=(apply(my_training[,82:91,with=F],1,mean)),
-                                   "sd_10"=(apply(my_training[,82:91,with=F],1,sd)),
-                                   "fc_10"=(apply(my_training[,82:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                                   "fm_10"=(apply(my_training[,82:91,with=F],1,feature_max_limit)))]
+                                   "sd_10"=(apply(my_training[,82:91,with=F],1,sd)))]
   
   
-  my_test <- my_test[,':='("max_90"=(apply(my_test[,2:91,with=F],1,max)),
-                           "min_90"=(apply(my_test[,2:91,with=F],1,min)),
-                           "median_90"=(apply(my_test[,2:91,with=F],1,median)),
-                           "mean_90"=(apply(my_test[,2:91,with=F],1,mean)),
-                           "sd_90"=(apply(my_test[,2:91,with=F],1,sd)),
-                           "fc_90"=(apply(my_test[,2:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                           "fm_90"=(apply(my_test[,2:91,with=F],1,feature_max_limit)),
-                           
-                           "max_80"=(apply(my_test[,12:91,with=F],1,max)),
-                           "min_80"=(apply(my_test[,12:91,with=F],1,min)),
-                           "median_80"=(apply(my_test[,12:91,with=F],1,median)),
-                           "mean_80"=(apply(my_test[,12:91,with=F],1,mean)),
-                           "sd_80"=(apply(my_test[,12:91,with=F],1,sd)),
-                           "fc_80"=(apply(my_test[,12:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                           "fm_80"=(apply(my_test[,12:91,with=F],1,feature_max_limit)),
-                           
-                           "max_70"=(apply(my_test[,22:91,with=F],1,max)),
-                           "min_70"=(apply(my_test[,22:91,with=F],1,min)),
-                           "median_70"=(apply(my_test[,22:91,with=F],1,median)),
-                           "mean_70"=(apply(my_test[,22:91,with=F],1,mean)),
-                           "sd_70"=(apply(my_test[,22:91,with=F],1,sd)),
-                           "fc_70"=(apply(my_test[,22:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                           "fm_70"=(apply(my_test[,22:91,with=F],1,feature_max_limit)),
-                           
-                           "max_60"=(apply(my_test[,32:91,with=F],1,max)),
-                           "min_60"=(apply(my_test[,32:91,with=F],1,min)),
-                           "median_60"=(apply(my_test[,32:91,with=F],1,median)),
-                           "mean_60"=(apply(my_test[,32:91,with=F],1,mean)),
-                           "sd_60"=(apply(my_test[,32:91,with=F],1,sd)),
-                           "fc_60"=(apply(my_test[,32:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                           "fm_60"=(apply(my_test[,32:91,with=F],1,feature_max_limit)),
-                           
-                           "max_50"=(apply(my_test[,42:91,with=F],1,max)),
-                           "min_50"=(apply(my_test[,42:91,with=F],1,min)),
-                           "median_50"=(apply(my_test[,42:91,with=F],1,median)),
-                           "mean_50"=(apply(my_test[,42:91,with=F],1,mean)),
-                           "sd_50"=(apply(my_test[,42:91,with=F],1,sd)),
-                           "fc_50"=(apply(my_test[,42:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                           "fm_50"=(apply(my_test[,42:91,with=F],1,feature_max_limit)),
-                           
-                           "max_40"=(apply(my_test[,52:91,with=F],1,max)),
-                           "min_40"=(apply(my_test[,52:91,with=F],1,min)),
-                           "median_40"=(apply(my_test[,52:91,with=F],1,median)),
-                           "mean_40"=(apply(my_test[,52:91,with=F],1,mean)),
-                           "sd_40"=(apply(my_test[,52:91,with=F],1,sd)),
-                           "fc_40"=(apply(my_test[,52:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                           "fm_40"=(apply(my_test[,52:91,with=F],1,feature_max_limit)),
-                           
-                           "max_30"=(apply(my_test[,62:91,with=F],1,max)),
-                           "min_30"=(apply(my_test[,62:91,with=F],1,min)),
-                           "median_30"=(apply(my_test[,62:91,with=F],1,median)),
-                           "mean_30"=(apply(my_test[,62:91,with=F],1,mean)),
-                           "sd_30"=(apply(my_test[,62:91,with=F],1,sd)),
-                           "fc_30"=(apply(my_test[,62:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                           "fm_30"=(apply(my_test[,62:91,with=F],1,feature_max_limit)),
-                           
-                           "max_20"=(apply(my_test[,72:91,with=F],1,max)),
-                           "min_20"=(apply(my_test[,72:91,with=F],1,min)),
-                           "median_20"=(apply(my_test[,72:91,with=F],1,median)),
-                           "mean_20"=(apply(my_test[,72:91,with=F],1,mean)),
-                           "sd_20"=(apply(my_test[,72:91,with=F],1,sd)),
-                           "fc_20"=(apply(my_test[,72:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                           "fm_20"=(apply(my_test[,72:91,with=F],1,feature_max_limit)),
-                           
-                           "max_10"=(apply(my_test[,82:91,with=F],1,max)),
-                           "min_10"=(apply(my_test[,82:91,with=F],1,min)),
-                           "median_10"=(apply(my_test[,82:91,with=F],1,median)),
-                           "mean_10"=(apply(my_test[,82:91,with=F],1,mean)),
-                           "sd_10"=(apply(my_test[,82:91,with=F],1,sd)),
-                           "fc_10"=(apply(my_test[,82:91,with=F],1,function(x){feature_coefficient(x,my_case)})),
-                           "fm_10"=(apply(my_test[,82:91,with=F],1,feature_max_limit)))]
+    my_test <- my_test[,':='("max_90"=(apply(my_test[,2:91,with=F],1,max)),
+                                     "min_90"=(apply(my_test[,2:91,with=F],1,min)),
+                                     "median_90"=(apply(my_test[,2:91,with=F],1,median)),
+                                     "mean_90"=(apply(my_test[,2:91,with=F],1,mean)),
+                                     "sd_90"=(apply(my_test[,2:91,with=F],1,sd)),
+                                     
+                                     "max_80"=(apply(my_test[,12:91,with=F],1,max)),
+                                     "min_80"=(apply(my_test[,12:91,with=F],1,min)),
+                                     "median_80"=(apply(my_test[,12:91,with=F],1,median)),
+                                     "mean_80"=(apply(my_test[,12:91,with=F],1,mean)),
+                                     "sd_80"=(apply(my_test[,12:91,with=F],1,sd)),
+                                     
+                                     "max_70"=(apply(my_test[,22:91,with=F],1,max)),
+                                     "min_70"=(apply(my_test[,22:91,with=F],1,min)),
+                                     "median_70"=(apply(my_test[,22:91,with=F],1,median)),
+                                     "mean_70"=(apply(my_test[,22:91,with=F],1,mean)),
+                                     "sd_70"=(apply(my_test[,22:91,with=F],1,sd)),
+                                     
+                                     "max_60"=(apply(my_test[,32:91,with=F],1,max)),
+                                     "min_60"=(apply(my_test[,32:91,with=F],1,min)),
+                                     "median_60"=(apply(my_test[,32:91,with=F],1,median)),
+                                     "mean_60"=(apply(my_test[,32:91,with=F],1,mean)),
+                                     "sd_60"=(apply(my_test[,32:91,with=F],1,sd)),
+                                     
+                                     "max_50"=(apply(my_test[,42:91,with=F],1,max)),
+                                     "min_50"=(apply(my_test[,42:91,with=F],1,min)),
+                                     "median_50"=(apply(my_test[,42:91,with=F],1,median)),
+                                     "mean_50"=(apply(my_test[,42:91,with=F],1,mean)),
+                                     "sd_50"=(apply(my_test[,42:91,with=F],1,sd)),
+                                     
+                                     "max_40"=(apply(my_test[,52:91,with=F],1,max)),
+                                     "min_40"=(apply(my_test[,52:91,with=F],1,min)),
+                                     "median_40"=(apply(my_test[,52:91,with=F],1,median)),
+                                     "mean_40"=(apply(my_test[,52:91,with=F],1,mean)),
+                                     "sd_40"=(apply(my_test[,52:91,with=F],1,sd)),
+                                     
+                                     "max_30"=(apply(my_test[,62:91,with=F],1,max)),
+                                     "min_30"=(apply(my_test[,62:91,with=F],1,min)),
+                                     "median_30"=(apply(my_test[,62:91,with=F],1,median)),
+                                     "mean_30"=(apply(my_test[,62:91,with=F],1,mean)),
+                                     "sd_30"=(apply(my_test[,62:91,with=F],1,sd)),
+                                     
+                                     "max_20"=(apply(my_test[,72:91,with=F],1,max)),
+                                     "min_20"=(apply(my_test[,72:91,with=F],1,min)),
+                                     "median_20"=(apply(my_test[,72:91,with=F],1,median)),
+                                     "mean_20"=(apply(my_test[,72:91,with=F],1,mean)),
+                                     "sd_20"=(apply(my_test[,72:91,with=F],1,sd)),
+                                     
+                                     "max_10"=(apply(my_test[,82:91,with=F],1,max)),
+                                     "min_10"=(apply(my_test[,82:91,with=F],1,min)),
+                                     "median_10"=(apply(my_test[,82:91,with=F],1,median)),
+                                     "mean_10"=(apply(my_test[,82:91,with=F],1,mean)),
+                                     "sd_10"=(apply(my_test[,82:91,with=F],1,sd)))]
+    
   
-    my_training <- cbind(data.table("type"="training"), my_training[,c("ind", my_feature, "response"),with=F][,response:=as.factor(response)])
-    my_test <- cbind(data.table("type"="test"), my_test[,c("ind", my_feature, "response"),with=F][,response:=as.factor(response)])
+    my_training <- cbind(data.table("type"="training"), my_training[,c("ind", feature, "response"),with=F][,response:=as.factor(response)])
+    my_test <- cbind(data.table("type"="test"), my_test[,c("ind", feature, "response"),with=F][,response:=as.factor(response)])
     return(rbindlist(list(my_training, my_test)))
 }
-data_10 <- tr_feature(training_set, test_set, feature_10, 10)
-data_30 <- tr_feature(training_set, test_set, feature_30, 30)
-data_60 <- tr_feature(training_set, test_set, feature_60, 60)
+data_10 <- tr_feature(training_set, test_set, table_feature, 10)
+data_30 <- tr_feature(training_set, test_set, table_feature, 30)
+data_60 <- tr_feature(training_set, test_set, table_feature, 60)
+
 
 save.image(file="classification.RData")
 load(file="classification.RData")
 
-
 ### Machine learning
 ml_cl <- function(my_data=data_10, my_case, my_algo, my_eGrid, my_metric, my_type="prob"){
-#         my_algo <- "knn"
-#         my_eGrid <- expand.grid(.k = c(1, 2, 3, 4,5, 6))
-# #     my_algo <- "rpart2"
-# #     my_eGrid <- expand.grid(.maxdepth = c(10, 20, 30))
-# #     # my_algo <- "svmLinear"
-# #     # my_eGrid <- expand.grid(.C = c(10^(-5), 10^(-3), 10, 10^(3), 10^(6), 10^(9)))
-#     my_data <- data_10
-#     my_case <- 10
-# #     # my_algo <- "rpart2"
-# #     # my_eGrid <- expand.grid(.maxdepth = c(10, 20, 30))
-# #     # # my_algo <- "LogitBoost"
-#     my_metric <- "my_ROC"
-# #     # # my_eGrid <- expand.grid(.nIter = c(50, 100, 150, 200))
-#     my_type <- "raw"
-# #     # simple_tree_10_roc <- ml_cl(data_10, 10, algo, eGrid, "ROC", "prob")
-# #     my_type <- "prob"
-# #     # my_algo <- "svmLinear"
-#     # my_eGrid <- expand.grid(.C = c(10^(-3), 10, 10^(3), 10^(6), 10^(9)))
-#     # my_algo <- "svmLinear"
-#     # my_eGrid <- expand.grid(.C = c(10^(-3), 10, 10^(3), 10^(6), 10^(9)))
+    # my_algo <- "rpart2"
+    # my_eGrid <- expand.grid(.maxdepth = c(10, 20, 30))
+    # my_data <- data_10
+    # my_case <- 10
+    # my_metric <- "my_ROC"
+    # my_type <- "raw"
+
     # #
     my_training <- my_data[type=="training"][,-c("type"),with=F]
     my_test <- my_data[type=="test"][,-c("type"),with=F]
@@ -649,7 +573,14 @@ ml_cl <- function(my_data=data_10, my_case, my_algo, my_eGrid, my_metric, my_typ
     
     ## Créé les k-folds
     temp_fold <- cbind(data.frame("fold"=1:nrow(temp_train)), temp_train)
-    folds <- createFolds(temp_fold[,"fold"], k = 5)
+    nb_row <- 1:nrow(my_training)
+    folds_in <- createFolds(temp_fold[,"fold"], k = 5)
+    folds_out <- folds_in
+    folds_in$Fold1 <- nb_row[! nb_row %in% folds_in$Fold1]
+    folds_in$Fold2 <- nb_row[! nb_row %in% folds_in$Fold2]
+    folds_in$Fold3 <- nb_row[! nb_row %in% folds_in$Fold3]
+    folds_in$Fold4 <- nb_row[! nb_row %in% folds_in$Fold4]
+    folds_in$Fold5 <- nb_row[! nb_row %in% folds_in$Fold5]
     
     ## Génère les séquences pour choisies pour chaque itération
     ## (reproduction des résultats) #length is = (n_repeats*nresampling)+1
@@ -663,23 +594,23 @@ ml_cl <- function(my_data=data_10, my_case, my_algo, my_eGrid, my_metric, my_typ
     if(my_metric=="qq_metric"){
         if(my_type=="prob"){
             ## Paramètre la cross validation et la nature des résultats
-            control <- trainControl(method="cv", number=5, seeds=seeds, index=folds, classProbs=TRUE, summaryFunction = quaqua_Summary_cl)
+            control <- trainControl(method="cv", number=5, seeds=seeds, index=folds_in, indexOut=folds_out, classProbs=TRUE, summaryFunction = quaqua_Summary_cl)
         }else if(my_type=="raw"){
-            control <- trainControl(method="cv", number=5, seeds=seeds, index=folds, classProbs=FALSE, summaryFunction = quaqua_Summary_cl)
+            control <- trainControl(method="cv", number=5, seeds=seeds, index=folds_in, indexOut=folds_out, classProbs=FALSE, summaryFunction = quaqua_Summary_cl)
         }
     }else if(my_metric=="my_ROC"){
         if(my_type=="prob"){
             ## Paramètre la cross validation et la nature des résultats
-            control <- trainControl(method="cv", number=5, seeds=seeds, index=folds, summaryFunction=ROC_Summary, classProbs=TRUE)
+            control <- trainControl(method="cv", number=5, seeds=seeds, index=folds_in, indexOut=folds_out, summaryFunction=ROC_Summary, classProbs=TRUE)
         }else if(my_type=="raw"){
-            control <- trainControl(method="cv", number=5, seeds=seeds, index=folds, summaryFunction=ROC_Summary, classProbs=FALSE)
+            control <- trainControl(method="cv", number=5, seeds=seeds, index=folds_in, indexOut=folds_out, summaryFunction=ROC_Summary, classProbs=FALSE)
         }
     }else{
         if(my_type=="prob"){
             ## Paramètre la cross validation et la nature des résultats
-            control <- trainControl(method="cv", number=5, seeds=seeds, index=folds, classProbs=TRUE)
+            control <- trainControl(method="cv", number=5, seeds=seeds, index=folds_in, indexOut=folds_out, classProbs=TRUE)
         }else if(my_type=="raw"){
-            control <- trainControl(method="cv", number=5, seeds=seeds, index=folds, classProbs=FALSE)
+            control <- trainControl(method="cv", number=5, seeds=seeds, index=folds_in, indexOut=folds_out, classProbs=FALSE)
         }
     }
 
@@ -796,7 +727,6 @@ simple_tree_10_my_ROC <- ml_cl(data_10, 10, algo, eGrid, "my_ROC", "prob")
 simple_tree_30_my_ROC <- ml_cl(data_30, 30, algo, eGrid, "my_ROC", "prob")
 simple_tree_60_my_ROC <- ml_cl(data_60, 60, algo, eGrid, "my_ROC", "prob")
 
-
 ### Bagged CART
 algo <- "treebag"
 eGrid <- NULL
@@ -812,7 +742,6 @@ Bagged_tree_60_kap <- ml_cl(data_60, 60, algo, eGrid, "Kappa", "prob")
 Bagged_tree_10_my_ROC <- ml_cl(data_10, 10, algo, eGrid, "my_ROC", "prob")
 Bagged_tree_30_my_ROC <- ml_cl(data_30, 30, algo, eGrid, "my_ROC", "prob")
 Bagged_tree_60_my_ROC <- ml_cl(data_60, 60, algo, eGrid, "my_ROC", "prob")
-
 
 ### Boosted Tree
 algo <- "blackboost"
@@ -830,11 +759,9 @@ Boosted_tree_10_my_ROC <- ml_cl(data_10, 10, algo, eGrid, "my_ROC", "prob")
 Boosted_tree_30_my_ROC <- ml_cl(data_30, 30, algo, eGrid, "my_ROC", "prob")
 Boosted_tree_60_my_ROC <- ml_cl(data_60, 60, algo, eGrid, "my_ROC", "prob")
 
-
-
 ### Random Forest
 algo <- "ranger"
-eGrid <- expand.grid(.mtry = floor((1:floor(length(feature_10)/10))*10))
+eGrid <- expand.grid(.mtry = c(1,2,3,4,5,6,7))
 rf_tree_10_qq <- ml_cl(data_10, 10, algo, eGrid, "qq_metric", "prob")
 rf_tree_30_qq <- ml_cl(data_30, 30, algo, eGrid, "qq_metric", "prob")
 rf_tree_60_qq <- ml_cl(data_60, 60, algo, eGrid, "qq_metric", "prob")
@@ -850,8 +777,8 @@ rf_tree_60_my_ROC <- ml_cl(data_60, 60, algo, eGrid, "my_ROC", "prob")
 
 ############## Linear Model #################
 ## Generalized Linear Model
-algo <- "glm"
-eGrid <- NULL
+algo <- "glmnet"
+eGrid <- expand.grid(.alpha = 1, .lambda = 0)
 glm_10_qq <- ml_cl(data_10, 10, algo, eGrid, "qq_metric", "prob")
 glm_30_qq <- ml_cl(data_30, 30, algo, eGrid, "qq_metric", "prob")
 glm_60_qq <- ml_cl(data_60, 60, algo, eGrid, "qq_metric", "prob")
@@ -930,7 +857,6 @@ knn_10_my_ROC <- ml_cl(data_10, 10, algo, eGrid, "my_ROC", "raw")
 knn_30_my_ROC <- ml_cl(data_30, 30, algo, eGrid, "my_ROC", "raw")
 knn_60_my_ROC <- ml_cl(data_60, 60, algo, eGrid, "my_ROC", "raw")
 
-
 ############### Réseaux de neurones ###########
 algo <- "mlp"
 eGrid <- expand.grid(.size = 1:5)
@@ -946,8 +872,6 @@ rn_60_kap <- ml_cl(data_60, 60, algo, eGrid, "Kappa", "prob")
 rn_10_my_ROC <- ml_cl(data_10, 10, algo, eGrid, "my_ROC", "prob")
 rn_30_my_ROC <- ml_cl(data_30, 30, algo, eGrid, "my_ROC", "prob")
 rn_60_my_ROC <- ml_cl(data_60, 60, algo, eGrid, "my_ROC", "prob")
-
-
 
 ############### SVM ###########
 ### Linear Kernel
@@ -999,3 +923,4 @@ arm_10_my_ROC <- ml_cl(data_10, 10, algo, eGrid, "my_ROC", "prob")
 arm_30_my_ROC <- ml_cl(data_30, 30, algo, eGrid, "my_ROC", "prob")
 arm_60_my_ROC <- ml_cl(data_60, 60, algo, eGrid, "my_ROC", "prob")
 
+save.image(file="classification_2.RData")
